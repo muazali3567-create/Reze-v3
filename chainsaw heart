@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reze Assistant v2</title>
+  <style>
+    body { margin: 0; background: #0e0e11; font-family: system-ui, -apple-system, sans-serif; color: #eaeaf0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    #app { width: 100%; max-width: 420px; height: 90vh; background: #15151c; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+    #header { padding: 16px; text-align: center; font-weight: 600; border-bottom: 1px solid #222; color: #ff6b81; }
+    #chat { flex: 1; padding: 16px; overflow-y: auto; }
+    .message { margin-bottom: 12px; line-height: 1.4; }
+    .reze { color: #ff6b81; }
+    .you { color: #7dd3fc; text-align: right; }
+    #inputArea { display: flex; padding: 12px; border-top: 1px solid #222; gap: 8px; }
+    input { flex: 1; background: #0e0e11; border: 1px solid #222; border-radius: 10px; padding: 10px; color: #eaeaf0; outline: none; }
+    button { background: #ff6b81; border: none; border-radius: 10px; padding: 10px 14px; color: #0e0e11; font-weight: 600; cursor: pointer; }
+    button.mic-active { background: #7dd3fc; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="header">Reze</div>
+    <div id="chat"></div>
+    <div id="inputArea">
+      <input id="userInput" placeholder="Say something or type…" />
+      <button id="micBtn" onclick="toggleVoiceInput()">🎙️</button>
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const input = document.getElementById("userInput");
+    const micBtn = document.getElementById("micBtn");
+
+    let selectedVoice = null;
+    let recognition = null;
+    let isListening = false;
+
+    // --- SELECT NATURAL VOICE ---
+    function loadVoices() {
+      const voices = speechSynthesis.getVoices();
+      // Try finding high-quality female/natural browser voices
+      selectedVoice = voices.find(v => v.name.includes("Google US English") || v.name.includes("Natural") || v.name.includes("Samantha")) || voices[0];
+    }
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    // --- REZE PERSONALITY CORE ---
+    function rezeReply(userText) {
+      const lower = userText.toLowerCase();
+
+      // Quote / Easter Egg Integration
+      if (lower.includes("quote") || lower.includes("manga") || lower.includes("anime")) {
+        const quotes = [
+          "Shall we run away together?",
+          "No matter what happens, you have to keep moving forward.",
+          "A goal without a plan is just a wish."
+        ];
+        return quotes[Math.floor(Math.random() * quotes.length)];
+      }
+
+      if (lower.includes("rough") || lower.includes("tired")) {
+        return "Yeah, I can hear it. Sit for a second. We’ll breathe, then we’ll figure out the next move. You don’t get to spiral, not on my watch.";
+      }
+      if (lower.includes("relax") || lower.includes("quiz")) {
+        return "I’m not saying grind yourself into dust. Take a short reset, fine. But after that? We do a clean 30–40 minutes. You’ll thank me later.";
+      }
+      if (lower.includes("today") || lower.includes("plan") || lower.includes("schedule")) {
+        return "Tell me what you’ve got on your plate today, and we’ll line it up properly. No overloading allowed.";
+      }
+      if (lower.includes("eat") || lower.includes("food")) {
+        return "You better not be skipping meals on purpose. Tell me what you had — or go fix it.";
+      }
+
+      return "You’re thinking too hard again. Just tell me what’s up. I’m right here.";
+    }
+
+    // --- CLEAN SPEECH SYNTHESIS ---
+    function speak(text) {
+      // Remove anime sound indicators, markdown formatting, and brackets/asterisks
+      const cleanText = text
+        .replace(/hmph|hmmph|…|\*.*?\*|[\(\)]/gi, "")
+        .trim();
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      if (selectedVoice) utterance.voice = selectedVoice;
+      utterance.rate = 0.95;
+      utterance.pitch = 1.05;
+
+      speechSynthesis.speak(utterance);
+    }
+
+    // --- VOICE INPUT (SPEECH TO TEXT) ---
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        input.value = transcript;
+        sendMessage();
+      };
+
+      recognition.onend = () => {
+        isListening = false;
+        micBtn.classList.remove("mic-active");
+      };
+    }
+
+    function toggleVoiceInput() {
+      if (!recognition) {
+        alert("Speech recognition is not supported in this browser. Try Chrome.");
+        return;
+      }
+      if (isListening) {
+        recognition.stop();
+      } else {
+        recognition.start();
+        isListening = true;
+        micBtn.classList.add("mic-active");
+      }
+    }
+
+    // --- MESSAGE HANDLING ---
+    function addMessage(text, sender) {
+      const div = document.createElement("div");
+      div.className = `message ${sender}`;
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function sendMessage() {
+      const text = input.value.trim();
+      if (!text) return;
+      addMessage(text, "you");
+      input.value = "";
+      setTimeout(() => {
+        const reply = rezeReply(text);
+        addMessage(reply, "reze");
+        speak(reply);
+      }, 500);
+    }
+
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") sendMessage();
+    });
+
+    window.onload = () => {
+      loadVoices();
+      const intro = "Morning. Don’t just stare at the screen — talk to me.";
+      addMessage(intro, "reze");
+      speak(intro);
+    };
+  </script>
+</body>
+</html>
